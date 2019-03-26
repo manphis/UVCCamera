@@ -549,7 +549,7 @@ public final class USBMonitor {
 	 * open specific USB device
 	 * @param device
 	 */
-	private final void processConnect(final UsbDevice device) {
+	public final void processConnect(final UsbDevice device) {
 		if (destroyed) return;
 		updatePermission(device, true);
 		mAsyncHandler.post(new Runnable() {

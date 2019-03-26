@@ -52,9 +52,9 @@ android {
 	}
 }
 
-tasks.withType(JavaCompile) {
-	compileTask -> compileTask.dependsOn ndkBuild
-}
+//tasks.withType(JavaCompile) {
+//	compileTask -> compileTask.dependsOn ndkBuild
+//}
 
 String getNdkBuildPath() {
 	Properties properties = new Properties()

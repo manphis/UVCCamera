@@ -29,14 +29,42 @@ LOCAL_PATH	:= $(call my-dir)
 include $(CLEAR_VARS)
 
 ######################################################################
+# FFmpeg library prebuild
+######################################################################
+include $(CLEAR_VARS)
+LOCAL_MODULE          := libavcodec
+LOCAL_SRC_FILES       := ../ffmpeg/lib/libavcodec.a
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE          := libavutil
+LOCAL_SRC_FILES       := ../ffmpeg/lib/libavutil.a
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE          := libswscale
+LOCAL_SRC_FILES       := ../ffmpeg/lib/libswscale.a
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE          := swresample
+LOCAL_SRC_FILES       := ../ffmpeg/lib/libswresample.a
+include $(PREBUILT_STATIC_LIBRARY)
+
+
+######################################################################
 # Make shared library libUVCCamera.so
 ######################################################################
+include $(CLEAR_VARS)
 CFLAGS := -Werror
+
+LOCAL_MODULE := UVCCamera
 
 LOCAL_C_INCLUDES := \
 		$(LOCAL_PATH)/ \
 		$(LOCAL_PATH)/../ \
 		$(LOCAL_PATH)/../rapidjson/include \
+		$(LOCAL_PATH)/../ffmpeg/include \
 
 LOCAL_CFLAGS := $(LOCAL_C_INCLUDES:%=-I%)
 LOCAL_CFLAGS += -DANDROID_NDK
@@ -45,7 +73,7 @@ LOCAL_CFLAGS += -DACCESS_RAW_DESCRIPTORS
 LOCAL_CFLAGS += -O3 -fstrict-aliasing -fprefetch-loop-arrays
 
 LOCAL_LDLIBS := -L$(SYSROOT)/usr/lib -ldl
-LOCAL_LDLIBS += -llog
+LOCAL_LDLIBS += -lm -llog -lz
 LOCAL_LDLIBS += -landroid
 
 LOCAL_SHARED_LIBRARIES += usb100 uvc
@@ -61,6 +89,13 @@ LOCAL_SRC_FILES := \
 		UVCStatusCallback.cpp \
 		Parameters.cpp \
 		serenegiant_usb_UVCCamera.cpp
+		
+LOCAL_SRC_FILES += ffmpeg_wrapper.c
 
-LOCAL_MODULE    := UVCCamera
+LOCAL_STATIC_LIBRARIES := \
+	libswscale \
+	libavcodec \
+	libavutil \
+	libswresample
+
 include $(BUILD_SHARED_LIBRARY)

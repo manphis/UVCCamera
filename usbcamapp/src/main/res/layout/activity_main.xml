@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_centerInParent="true">
+
+        <RelativeLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+
+            <TextView
+                android:id="@+id/state_tv"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="State: "
+                android:textSize="20sp"/>
+            <TextView
+                android:id="@+id/state_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_toRightOf="@+id/state_tv"
+                android:text="standby"
+                android:textSize="20sp"/>
+
+            <ImageView
+                android:id="@+id/state_iv"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="20dp"
+                android:layout_toRightOf="@+id/state_value"
+                android:layout_centerVertical="true"
+                android:visibility="invisible"
+                app:srcCompat="@android:drawable/ic_notification_overlay" />
+
+        </RelativeLayout>
+
+        <RelativeLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_weight="1">
+
+            <TextView
+                android:id="@+id/res_tv"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Resolution: "
+                android:textSize="20sp"/>
+            <TextView
+                android:id="@+id/res_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_toRightOf="@+id/res_tv"
+                android:text="resolution"
+                android:textSize="20sp"/>
+
+        </RelativeLayout>
+
+        <RelativeLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_weight="1">
+
+            <TextView
+                android:id="@+id/fps_tv"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Frame rate: "
+                android:textSize="20sp"/>
+            <TextView
+                android:id="@+id/fps_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_toRightOf="@+id/fps_tv"
+                android:text="0.0"
+                android:textSize="20sp"/>
+
+        </RelativeLayout>
+
+        <RelativeLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_weight="1">
+
+            <Button
+                android:id="@+id/start_record_btn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="start\nrecording"/>
+            <Button
+                android:id="@+id/stop_record_btn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_toRightOf="@+id/start_record_btn"
+                android:layout_marginLeft="10dp"
+                android:text="stop\nrecording"
+                android:enabled="false"/>
+
+        </RelativeLayout>
+
+
+
+    </LinearLayout>
+</RelativeLayout>

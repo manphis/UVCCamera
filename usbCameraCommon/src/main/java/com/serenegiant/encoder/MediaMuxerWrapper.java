@@ -41,8 +41,8 @@ public class MediaMuxerWrapper {
 	private static final boolean DEBUG = true;	// TODO set false on release
 	private static final String TAG = "MediaMuxerWrapper";
 
-	private static final String DIR_NAME = "USBCameraTest";
-    private static final SimpleDateFormat mDateTimeFormat = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.US);
+	private static final String DIR_NAME = "VideoRecord";
+    private static final SimpleDateFormat mDateTimeFormat = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US);
 
 	private String mOutputPath;
 	private final MediaMuxer mMediaMuxer;	// API >= 18
@@ -58,7 +58,19 @@ public class MediaMuxerWrapper {
 	public MediaMuxerWrapper(String ext) throws IOException {
 		if (TextUtils.isEmpty(ext)) ext = ".mp4";
 		try {
-			mOutputPath = getCaptureFile(Environment.DIRECTORY_MOVIES, ext).toString();
+			mOutputPath = getCaptureFile(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), ext).toString();
+		} catch (final NullPointerException e) {
+			throw new RuntimeException("This app has no permission of writing external storage");
+		}
+		mMediaMuxer = new MediaMuxer(mOutputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+		mEncoderCount = mStatredCount = 0;
+		mIsStarted = false;
+	}
+
+	public MediaMuxerWrapper(String dirPath, String ext) throws IOException {
+		if (TextUtils.isEmpty(ext)) ext = ".mp4";
+		try {
+			mOutputPath = getCaptureFile(new File(dirPath), ext).toString();
 		} catch (final NullPointerException e) {
 			throw new RuntimeException("This app has no permission of writing external storage");
 		}
@@ -200,6 +212,16 @@ public class MediaMuxerWrapper {
         }
     	return null;
     }
+
+	public static final File getCaptureFile(File dirFile, final String ext) {
+		final File dir = new File(dirFile, DIR_NAME);
+		Log.d(TAG, "path=" + dir.toString());
+		dir.mkdirs();
+		if (dir.canWrite()) {
+			return new File(dir, getDateTimeString() + ext);
+		}
+		return null;
+	}
 
     /**
      * get current date and time as String

@@ -40,6 +40,7 @@
 #include "utilbase.h"
 #include "UVCPreview.h"
 #include "libuvc_internal.h"
+#include "ffmpeg_wrapper.h"
 
 #define	LOCAL_DEBUG 0
 #define MAX_FRAME 4
@@ -77,6 +78,9 @@ UVCPreview::UVCPreview(uvc_device_handle_t *devh)
 	pthread_mutex_init(&capture_mutex, NULL);
 //	
 	pthread_mutex_init(&pool_mutex, NULL);
+
+
+	init_pool(1280*720*2);
 	EXIT();
 }
 
@@ -92,12 +96,29 @@ UVCPreview::~UVCPreview() {
 	clearPreviewFrame();
 	clearCaptureFrame();
 	clear_pool();
+
+    // close ffmpeg
+	ffmpeg_fini();
+	ffmpeg_close();
+
+	clear_pool();
+
 	pthread_mutex_destroy(&preview_mutex);
 	pthread_cond_destroy(&preview_sync);
 	pthread_mutex_destroy(&capture_mutex);
 	pthread_cond_destroy(&capture_sync);
 	pthread_mutex_destroy(&pool_mutex);
+
 	EXIT();
+}
+
+static uint32_t get_timestamp(int sampleRate, struct timeval clock);
+
+static uint64_t get_timestamp(struct timeval clock) {
+    uint64_t timestamp = (uint64_t)clock.tv_sec * 1000000 + clock.tv_usec;
+//    LOGI("get_timestamp time = %llu", timestamp);
+
+    return timestamp;
 }
 
 /**
@@ -184,6 +205,12 @@ int UVCPreview::setPreviewSize(int width, int height, int min_fps, int max_fps, 
 			!requestMode ? UVC_FRAME_FORMAT_YUYV : UVC_FRAME_FORMAT_MJPEG,
 			requestWidth, requestHeight, requestMinFps, requestMaxFps);
 	}
+
+    // init ffmpeg
+    if (width == 1280) {
+	    ffmpeg_init(width, height);
+        ffmpeg_open();
+    }
 	
 	RETURN(result, int);
 }
@@ -229,7 +256,7 @@ int UVCPreview::setFrameCallback(JNIEnv *env, jobject frame_callback_obj, int pi
 				jclass clazz = env->GetObjectClass(frame_callback_obj);
 				if (LIKELY(clazz)) {
 					iframecallback_fields.onFrame = env->GetMethodID(clazz,
-						"onFrame",	"(Ljava/nio/ByteBuffer;)V");
+						"onFrame",	"(Ljava/nio/ByteBuffer;J)V");
 				} else {
 					LOGW("failed to get object class");
 				}
@@ -333,9 +360,10 @@ int UVCPreview::startPreview() {
 		mIsRunning = true;
 		pthread_mutex_lock(&preview_mutex);
 		{
-			if (LIKELY(mPreviewWindow)) {
-				result = pthread_create(&preview_thread, NULL, preview_thread_func, (void *)this);
-			}
+//			if (LIKELY(mPreviewWindow)) {
+//				result = pthread_create(&preview_thread, NULL, preview_thread_func, (void *)this);
+//			}
+			result = pthread_create(&preview_thread, NULL, preview_thread_func, (void *)this);
 		}
 		pthread_mutex_unlock(&preview_mutex);
 		if (UNLIKELY(result != EXIT_SUCCESS)) {
@@ -358,12 +386,14 @@ int UVCPreview::stopPreview() {
 		mIsRunning = false;
 		pthread_cond_signal(&preview_sync);
 		pthread_cond_signal(&capture_sync);
+
 		if (pthread_join(capture_thread, NULL) != EXIT_SUCCESS) {
 			LOGW("UVCPreview::terminate capture thread: pthread_join failed");
 		}
 		if (pthread_join(preview_thread, NULL) != EXIT_SUCCESS) {
 			LOGW("UVCPreview::terminate preview thread: pthread_join failed");
 		}
+
 		clearDisplay();
 	}
 	clearPreviewFrame();
@@ -529,11 +559,22 @@ void UVCPreview::do_preview(uvc_stream_ctrl_t *ctrl) {
 			for ( ; LIKELY(isRunning()) ; ) {
 				frame_mjpeg = waitPreviewFrame();
 				if (LIKELY(frame_mjpeg)) {
-					frame = get_frame(frame_mjpeg->width * frame_mjpeg->height * 2);
-					result = uvc_mjpeg2yuyv(frame_mjpeg, frame);   // MJPEG => yuyv
+				    int raw_size = frame_mjpeg->width * frame_mjpeg->height * 2;
+					frame = get_frame(raw_size);
+//					result = uvc_mjpeg2yuyv(frame_mjpeg, frame);   // MJPEG => yuyv
+
+                    if (uvc_ensure_frame_size(frame, raw_size) < 0) {
+		                LOGE("UVC_ERROR_NO_MEM");
+		            }
+
+                    int ret = ffmpeg_decode((unsigned char *)frame_mjpeg->data, frame_mjpeg->actual_bytes,
+                                    (unsigned char *)frame->data, raw_size);
+
 					recycle_frame(frame_mjpeg);
-					if (LIKELY(!result)) {
-						frame = draw_preview_one(frame, &mPreviewWindow, uvc_any2rgbx, 4);
+//					if (LIKELY(!result)) {
+                    if (ret == 0) {
+					    if (mPreviewWindow)
+						    frame = draw_preview_one(frame, &mPreviewWindow, uvc_any2rgbx, 4);
 						addCaptureFrame(frame);
 					} else {
 						recycle_frame(frame);
@@ -707,7 +748,10 @@ void UVCPreview::addCaptureFrame(uvc_frame_t *frame) {
 		}
 		captureQueu = frame;
 		pthread_cond_broadcast(&capture_sync);
-	}
+	} else {
+      	    // Add this can sovle native leak
+        recycle_frame(frame);
+    }
 	pthread_mutex_unlock(&capture_mutex);
 }
 
@@ -791,7 +835,7 @@ void UVCPreview::do_capture(JNIEnv *env) {
 
 void UVCPreview::do_capture_idle_loop(JNIEnv *env) {
 	ENTER();
-	
+
 	for (; isRunning() && isCapturing() ;) {
 		do_capture_callback(env, waitCaptureFrame());
 	}
@@ -826,6 +870,7 @@ void UVCPreview::do_capture_surface(JNIEnv *env) {
 					}
 				}
 			}
+
 			do_capture_callback(env, frame);
 		}
 	}
@@ -843,7 +888,10 @@ void UVCPreview::do_capture_surface(JNIEnv *env) {
 /**
 * call IFrameCallback#onFrame if needs
  */
+/*
 void UVCPreview::do_capture_callback(JNIEnv *env, uvc_frame_t *frame) {
+    uint64_t timestamp;
+    jlong lts;
 	ENTER();
 
 	if (LIKELY(frame)) {
@@ -851,7 +899,9 @@ void UVCPreview::do_capture_callback(JNIEnv *env, uvc_frame_t *frame) {
 		if (mFrameCallbackObj) {
 			if (mFrameCallbackFunc) {
 				callback_frame = get_frame(callbackPixelBytes);
+				timestamp = get_timestamp(frame->capture_time);
 				if (LIKELY(callback_frame)) {
+				    lts = (jlong)(unsigned long long)timestamp;
 					int b = mFrameCallbackFunc(frame, callback_frame);
 					recycle_frame(frame);
 					if (UNLIKELY(b)) {
@@ -864,13 +914,61 @@ void UVCPreview::do_capture_callback(JNIEnv *env, uvc_frame_t *frame) {
 					goto SKIP;
 				}
 			}
-			jobject buf = env->NewDirectByteBuffer(callback_frame->data, callbackPixelBytes);
-			env->CallVoidMethod(mFrameCallbackObj, iframecallback_fields.onFrame, buf);
-			env->ExceptionClear();
-			env->DeleteLocalRef(buf);
+
+            jobject buf = env->NewDirectByteBuffer(callback_frame->data, callbackPixelBytes);
+            env->CallVoidMethod(mFrameCallbackObj, iframecallback_fields.onFrame, buf, lts);
+            env->ExceptionClear();
+            env->DeleteLocalRef(buf);
+
 		}
  SKIP:
 		recycle_frame(callback_frame);
+	}
+	EXIT();
+}
+*/
+void UVCPreview::do_capture_callback(JNIEnv *env, uvc_frame_t *yuv422_frame) {
+    uint64_t timestamp;
+    jlong lts;
+    uvc_frame_t *frame = NULL;
+	ENTER();
+	int ret = 0;
+
+	if (LIKELY(yuv422_frame)) {
+		if (mFrameCallbackObj) {
+			if (mFrameCallbackFunc) {
+				timestamp = get_timestamp(yuv422_frame->capture_time);
+				if (LIKELY(yuv422_frame)) {
+				    lts = (jlong)(unsigned long long)timestamp;
+				} else {
+					LOGW("failed to allocate for callback frame");
+					goto SKIP;
+				}
+			}
+
+            int size = yuv422_frame->actual_bytes * 3 / 4;
+            frame = get_frame(size);
+
+            if (uvc_ensure_frame_size(frame, size) < 0) {
+                LOGE("UVC_ERROR_NO_MEM");
+                goto SKIP;
+            }
+
+            ret = ffmpeg_scale((unsigned char *)yuv422_frame->data, yuv422_frame->actual_bytes,
+                            (unsigned char *)frame->data, size);
+
+//					if (LIKELY(!result)) {
+            if (ret == 0) {
+                jobject buf = env->NewDirectByteBuffer(frame->data, callbackPixelBytes);
+                env->CallVoidMethod(mFrameCallbackObj, iframecallback_fields.onFrame, buf, lts);
+                env->ExceptionClear();
+                env->DeleteLocalRef(buf);
+            }
+		}
+ SKIP:
+		recycle_frame(yuv422_frame);
+		if (frame)
+		    recycle_frame(frame);
 	}
 	EXIT();
 }

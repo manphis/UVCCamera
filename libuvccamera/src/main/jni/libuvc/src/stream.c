@@ -1703,6 +1703,8 @@ void _uvc_populate_frame(uvc_stream_handle_t *strmh) {
 	memcpy(frame->data, strmh->holdbuf, strmh->hold_bytes/*frame->data_bytes*/);	// XXX
 
 	/** @todo set the frame time */
+	gettimeofday(&(frame->capture_time), NULL);
+//	LOGI("uvc capture_time = %ld, %ld", frame->capture_time.tv_sec, frame->capture_time.tv_usec);
 }
 
 /** Poll for a frame
