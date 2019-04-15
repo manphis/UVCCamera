@@ -569,6 +569,7 @@ void UVCPreview::do_preview(uvc_stream_ctrl_t *ctrl) {
 
                     int ret = ffmpeg_decode((unsigned char *)frame_mjpeg->data, frame_mjpeg->actual_bytes,
                                     (unsigned char *)frame->data, raw_size);
+                    frame->capture_time = frame_mjpeg->capture_time;
 
 					recycle_frame(frame_mjpeg);
 //					if (LIKELY(!result)) {
@@ -956,6 +957,8 @@ void UVCPreview::do_capture_callback(JNIEnv *env, uvc_frame_t *yuv422_frame) {
 
             ret = ffmpeg_scale((unsigned char *)yuv422_frame->data, yuv422_frame->actual_bytes,
                             (unsigned char *)frame->data, size);
+            frame->capture_time = yuv422_frame->capture_time;
+//            LOGI("uvc capture_time = %ld, %ld", frame->capture_time.tv_sec, frame->capture_time.tv_usec);
 
 //					if (LIKELY(!result)) {
             if (ret == 0) {
