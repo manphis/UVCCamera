@@ -69,6 +69,10 @@ uvc_frame_desc_t *uvc_find_frame_desc(uvc_device_handle_t *devh,
 static void *_uvc_user_caller(void *arg);
 static void _uvc_populate_frame(uvc_stream_handle_t *strmh);
 
+static struct timeval g_timestamp;
+static uint32_t g_framecount;
+static uint32_t MAX_TIME_DIFF_MS = 60;
+
 struct format_table_entry {
 	enum uvc_frame_format format;
 	uint8_t abstract_fmt;
@@ -895,6 +899,7 @@ static inline void _uvc_process_payload_iso(uvc_stream_handle_t *strmh, struct l
 					}
 				}
 
+
 				if (header_info & UVC_STREAM_SCR) {
 					// XXX saki some camera may send broken packet or failed to receive all data
 					if (LIKELY(header_len >= 10)) {
@@ -1239,6 +1244,9 @@ uvc_error_t uvc_start_streaming_bandwidth(uvc_device_handle_t *devh,
 		uvc_stream_close(strmh);
 		return ret;
 	}
+
+	LOGI("camera uvc_start_streaming_bandwidth");
+	g_framecount = 0;
 
 	return UVC_SUCCESS;
 }
@@ -1659,6 +1667,47 @@ static void *_uvc_user_caller(void *arg) {
 	return NULL; // return value ignored
 }
 
+static uint64_t convertToTimestamp(struct timeval *timestruct) {
+    uint64_t timestamp =  timestruct->tv_sec * 1000000 + timestruct->tv_usec;
+    return timestamp;
+}
+
+static void timeval_addMsecs(struct timeval *a, uint32_t msecs) {
+	int uSecs = (msecs%1000) * 1000 + a->tv_usec;
+	a->tv_usec = uSecs % 1000000;
+	a->tv_sec += msecs/1000 + uSecs/1000000;
+}
+
+static void _set_frame_timestamp(uvc_frame_t *frame) {
+    uint32_t time_diff = 0;
+    struct timeval cur_timestamp;
+    gettimeofday(&cur_timestamp, NULL);
+
+    if (g_framecount == 0) {
+        g_timestamp = cur_timestamp;
+        frame->capture_time = g_timestamp;
+        g_framecount++;
+        return;
+    }
+
+    time_diff = convertToTimestamp(&cur_timestamp) - convertToTimestamp(&g_timestamp);
+
+    if (time_diff > MAX_TIME_DIFF_MS * 1000) {
+        LOGI("camera time_diff = %llu - %llu = %u", convertToTimestamp(&cur_timestamp), convertToTimestamp(&g_timestamp), time_diff);
+        timeval_addMsecs(&g_timestamp, 60);
+        LOGI("camera assign timestamp = %llu", convertToTimestamp(&g_timestamp));
+    } else {
+        g_timestamp = cur_timestamp;
+    }
+    frame->capture_time = g_timestamp;
+    g_framecount++;
+
+    if (g_framecount % 100 == 0)
+        LOGI("camera time_diff = %u", time_diff);
+
+    return;
+}
+
 /** @internal
  * @brief Populate the fields of a frame to be handed to user code
  * must be called with stream cb lock held!
@@ -1667,6 +1716,7 @@ void _uvc_populate_frame(uvc_stream_handle_t *strmh) {
 	size_t alloc_size = strmh->cur_ctrl.dwMaxVideoFrameSize;
 	uvc_frame_t *frame = &strmh->frame;
 	uvc_frame_desc_t *frame_desc;
+	int time_diff = 0.0;
 
 	/** @todo this stuff that hits the main config cache should really happen
 	 * in start() so that only one thread hits these data. all of this stuff
@@ -1703,7 +1753,19 @@ void _uvc_populate_frame(uvc_stream_handle_t *strmh) {
 	memcpy(frame->data, strmh->holdbuf, strmh->hold_bytes/*frame->data_bytes*/);	// XXX
 
 	/** @todo set the frame time */
+	_set_frame_timestamp(frame);
+//	LOGI("camera TS frame_timestamp = %llu", convertToTimestamp(&frame->capture_time));
+/*
 	gettimeofday(&(frame->capture_time), NULL);
+
+	time_diff = (frame->capture_time.tv_sec * 1000000 + frame->capture_time.tv_usec) -
+	            (g_time.tv_sec * 1000000 + g_time.tv_usec);
+
+	if (time_diff > 45000 || time_diff < 35000) {
+	    LOGI("uvc capture_time time_diff_2 = %ld", time_diff);
+	}
+	g_time = frame->capture_time;
+*/
 //	LOGI("uvc capture_time = %ld, %ld", frame->capture_time.tv_sec, frame->capture_time.tv_usec);
 }
 

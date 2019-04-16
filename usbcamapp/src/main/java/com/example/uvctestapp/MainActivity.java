@@ -68,6 +68,7 @@ public class MainActivity extends AppCompatActivity {
     private String SDCardPath = null;
     private boolean shouldRestartRecord = false;
     private boolean autoRecord = true;
+    private long g_timestamp = 0;
 
     private Camera mCamera = null;
 
@@ -252,6 +253,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public void test(){}
+
     private boolean handleStartRecording() {
         Log.v(TAG, "handleStartRecording:");
         initSDCard();
@@ -337,6 +340,10 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onFrame(ByteBuffer frame, long timestamp) {
             calculateFps();
+            long t_diff = timestamp-g_timestamp;
+            if (t_diff > 60000)
+                Log.i(TAG, "TS camera_timestamp_diff_2 = " + t_diff);
+            g_timestamp = timestamp;
 
             if (mIsRecording) {
                 final MediaVideoBufferEncoder videoEncoder;

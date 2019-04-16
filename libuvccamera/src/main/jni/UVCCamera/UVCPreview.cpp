@@ -112,7 +112,7 @@ UVCPreview::~UVCPreview() {
 	EXIT();
 }
 
-static uint32_t get_timestamp(int sampleRate, struct timeval clock);
+static uint64_t get_timestamp(int sampleRate, struct timeval clock);
 
 static uint64_t get_timestamp(struct timeval clock) {
     uint64_t timestamp = (uint64_t)clock.tv_sec * 1000000 + clock.tv_usec;
@@ -940,7 +940,8 @@ void UVCPreview::do_capture_callback(JNIEnv *env, uvc_frame_t *yuv422_frame) {
 			if (mFrameCallbackFunc) {
 				timestamp = get_timestamp(yuv422_frame->capture_time);
 				if (LIKELY(yuv422_frame)) {
-				    lts = (jlong)(unsigned long long)timestamp;
+				    lts = (jlong)(unsigned long long)(timestamp);
+//				    LOGW("TS lts = %llu", lts);
 				} else {
 					LOGW("failed to allocate for callback frame");
 					goto SKIP;
