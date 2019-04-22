@@ -26,6 +26,7 @@ package com.serenegiant.encoder;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import android.media.MediaCodec;
 import android.media.MediaFormat;
@@ -80,7 +81,7 @@ public abstract class MediaEncoder implements Runnable {
     /**
      * BufferInfo instance for dequeuing
      */
-    private MediaCodec.BufferInfo mBufferInfo;		// API >= 16(Android4.1.2)
+//    private MediaCodec.BufferInfo mBufferInfo;		// API >= 16(Android4.1.2)
 
     protected final MediaEncoderListener mListener;
 
@@ -91,10 +92,12 @@ public abstract class MediaEncoder implements Runnable {
 		muxer.addEncoder(this);
 		mListener = listener;
         synchronized (mSync) {
+			stopSig = new MyBuffer(ByteBuffer.wrap(stop_sig), null);
             // create BufferInfo here for effectiveness(to reduce GC)
-            mBufferInfo = new MediaCodec.BufferInfo();
+//            mBufferInfo = new MediaCodec.BufferInfo();
             // wait for starting thread
             new Thread(this, getClass().getSimpleName()).start();
+			mThread = new FileWriteThread();
             try {
             	mSync.wait();
             } catch (final InterruptedException e) {
@@ -185,6 +188,7 @@ public abstract class MediaEncoder implements Runnable {
 		synchronized (mSync) {
 			mIsCapturing = true;
 			mRequestStop = false;
+			mThread.start();
 			mSync.notifyAll();
 		}
 	}
@@ -218,6 +222,12 @@ public abstract class MediaEncoder implements Runnable {
 			Log.e(TAG, "failed onStopped", e);
 		}
 		mIsCapturing = false;
+		try {
+			dataQueue.put(stopSig);
+		} catch (InterruptedException ie) {
+			ie.printStackTrace();
+		}
+
         if (mMediaCodec != null) {
 			try {
 	            mMediaCodec.stop();
@@ -237,7 +247,7 @@ public abstract class MediaEncoder implements Runnable {
     			}
        		}
         }
-        mBufferInfo = null;
+//        mBufferInfo = null;
     }
 
     protected void signalEndOfInputStream() {
@@ -351,6 +361,7 @@ public abstract class MediaEncoder implements Runnable {
         }
 LOOP:	while (mIsCapturing) {
 			// get encoded data with maximum timeout duration of TIMEOUT_USEC(=10[msec])
+			MediaCodec.BufferInfo mBufferInfo = new MediaCodec.BufferInfo();
             encoderStatus = mMediaCodec.dequeueOutputBuffer(mBufferInfo, TIMEOUT_USEC);
             if (encoderStatus == MediaCodec.INFO_TRY_AGAIN_LATER) {
                 // wait 5 counts(=TIMEOUT_USEC x 5 = 50msec) until data/EOS come
@@ -413,8 +424,25 @@ LOOP:	while (mIsCapturing) {
                         throw new RuntimeException("drain:muxer hasn't started");
                     }
                     // write encoded data to muxer(need to adjust presentationTimeUs.
+					encodedData.position(0);
+					ByteBuffer myBuffer = ByteBuffer.allocate(mBufferInfo.size);
+//					encodedData.flip();
+					myBuffer.put(encodedData);
+
+					MyBuffer buf = new MyBuffer(myBuffer, mBufferInfo);
+
                    	mBufferInfo.presentationTimeUs = getPTSUs();
-                   	muxer.writeSampleData(mTrackIndex, encodedData, mBufferInfo);
+                   	try {
+						if (dataQueue.size() < 18) {
+							dataQueue.put(buf);
+						} else {
+							Log.i(TAG, "camera write dataQueue full size = " + dataQueue.size());
+						}
+					} catch (InterruptedException ie) {
+                   		ie.printStackTrace();
+					}
+
+//                   	muxer.writeSampleData(mTrackIndex, encodedData, mBufferInfo);
 					prevOutputPTSUs = mBufferInfo.presentationTimeUs;
                 }
                 // return buffer to encoder
@@ -444,5 +472,58 @@ LOOP:	while (mIsCapturing) {
 			result = (prevOutputPTSUs - result) + result;
 		return result;
     }
+
+	private LinkedBlockingQueue<MyBuffer> dataQueue = new LinkedBlockingQueue<MyBuffer>(20);
+//	private LinkedBlockingQueue<MediaCodec.BufferInfo> infoQueue = new LinkedBlockingQueue<MediaCodec.BufferInfo>(20);
+	private FileWriteThread mThread = null;
+	private byte[] stop_sig = {0,0,0,0};
+	private MyBuffer stopSig;
+
+	class FileWriteThread extends Thread {
+		public void run() {
+			final MediaMuxerWrapper muxer = mWeakMuxer.get();
+			Log.i(TAG, "FileWriteThread start");
+			while (mIsCapturing) {
+				try {
+					if (!mMuxerStarted) {
+						// muxer is not ready...this will prrograming failure.
+						try {
+							Log.i(TAG, "wait for start...");
+							Thread.sleep(50);
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
+					}
+
+					MyBuffer buffer = dataQueue.take();        // implement by LinkedBlockingQueue<>, blocking mode
+//					MediaCodec.BufferInfo info = infoQueue.take();
+
+					if (buffer.equals(stopSig)) {
+						continue;
+					}
+
+//					Log.i(TAG, "bufferinfo: " + info.size +" "+ info.offset +" "+ buffer.myBuffer.capacity() +" "+ info.presentationTimeUs);
+
+					muxer.writeSampleData(mTrackIndex, buffer.myBuffer, buffer.myInfo);
+
+					dataQueue.remove(buffer);
+					buffer = null;
+//					infoQueue.remove(info);
+
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
+	class MyBuffer {
+		public ByteBuffer myBuffer;
+		public MediaCodec.BufferInfo myInfo;
+		public MyBuffer(ByteBuffer b, MediaCodec.BufferInfo i) {
+			myBuffer = b;
+			myInfo = i;
+		}
+	}
 
 }

@@ -1245,7 +1245,7 @@ uvc_error_t uvc_start_streaming_bandwidth(uvc_device_handle_t *devh,
 		return ret;
 	}
 
-	LOGI("camera uvc_start_streaming_bandwidth");
+	LOGI("cameraeason uvc_start_streaming_bandwidth");
 	g_framecount = 0;
 
 	return UVC_SUCCESS;
@@ -1693,17 +1693,17 @@ static void _set_frame_timestamp(uvc_frame_t *frame) {
     time_diff = convertToTimestamp(&cur_timestamp) - convertToTimestamp(&g_timestamp);
 
     if (time_diff > MAX_TIME_DIFF_MS * 1000) {
-        LOGI("camera time_diff = %llu - %llu = %u", convertToTimestamp(&cur_timestamp), convertToTimestamp(&g_timestamp), time_diff);
+//        LOGI("camera time_diff = %llu - %llu = %u", convertToTimestamp(&cur_timestamp), convertToTimestamp(&g_timestamp), time_diff);
         timeval_addMsecs(&g_timestamp, 60);
-        LOGI("camera assign timestamp = %llu", convertToTimestamp(&g_timestamp));
+//        LOGI("camera assign timestamp = %llu", convertToTimestamp(&g_timestamp));
     } else {
         g_timestamp = cur_timestamp;
     }
     frame->capture_time = g_timestamp;
     g_framecount++;
 
-    if (g_framecount % 100 == 0)
-        LOGI("camera time_diff = %u", time_diff);
+//    if (g_framecount % 100 == 0)
+//        LOGI("camera time_diff = %u", time_diff);
 
     return;
 }

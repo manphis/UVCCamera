@@ -256,8 +256,8 @@ int ffmpeg_decode(const unsigned char* src_data,
         if (got_frame && (len == src_len)) {
             len = avpicture_layout((AVPicture *)frame, ctx->pix_fmt, ctx->width, ctx->height, dst_data, dst_len);
         } else {
-            LOGE("%s camera avcodec_decode_video2 failure len = %d, src_len = %d got_frame = %d",
-            __FUNCTION__, len, src_len, got_frame);
+//            LOGE("%s camera avcodec_decode_video2 failure len = %d, src_len = %d got_frame = %d",
+//            __FUNCTION__, len, src_len, got_frame);
 
             ret = -1;
         }
