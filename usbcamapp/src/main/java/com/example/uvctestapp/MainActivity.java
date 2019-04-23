@@ -1,5 +1,9 @@
 package com.example.uvctestapp;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Handler;
 import android.os.Message;
 import android.os.StatFs;
@@ -60,6 +64,7 @@ public class MainActivity extends AppCompatActivity {
     private FileChannel mChannel;
     private MediaMuxerWrapper mMuxer;
     private MediaVideoBufferEncoder mVideoEncoder;
+    private BroadcastReceiver mReceiver;
 
     private boolean mIsRecording;
     private int videoFrameCount;
@@ -196,6 +201,25 @@ public class MainActivity extends AppCompatActivity {
                 }
             }, 3000);
         }
+
+        IntentFilter intentFilter = new IntentFilter();
+//        intentFilter.addAction("android.intent.action.ACTION_SHUTDOWN");
+//        intentFilter.addAction("android.intent.action.QUICKBOOT_POWEROFF");
+        intentFilter.addAction("camapp_finish");
+
+        mReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                Log.i(TAG, "recv shutdown event " + intent);
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        handleShutdown();
+                    }
+                });
+            }
+        };
+        registerReceiver(mReceiver, intentFilter);
     }
 
     private void initLED() {
@@ -253,7 +277,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void test(){}
+    private void handleShutdown() {
+        synchronized (mSync) {
+            handleStopRecording();
+        }
+    }
 
     private boolean handleStartRecording() {
         Log.v(TAG, "handleStartRecording:");
